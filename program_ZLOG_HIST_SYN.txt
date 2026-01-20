@@ -1,0 +1,379 @@
+*&---------------------------------------------------------------------*
+*& Report  ZLOG_HIST_SYN
+*&
+* Create Date         : 06-07-2015
+* Release             : 6.0
+* Technical Author    : pwc_062
+* Functional Author   : Jitendra
+*----------------------------------------------------------------------*
+*&
+*&---------------------------------------------------------------------*
+
+REPORT zlog_hist_syn.
+
+DATA: gt_yttstx0002_hist TYPE TABLE OF yttstx0002_hist.
+DATA: gw_yttstx0002_hist LIKE LINE OF  gt_yttstx0002_hist.
+DATA: gt_yttstx0002      TYPE TABLE OF yttstx0002.
+DATA: gt1_yttstx0002      TYPE TABLE OF yttstx0002 WITH HEADER LINE.
+DATA: gw1_yttstx0002      TYPE yttstx0002.
+DATA: gw_yttstx0002      TYPE yttstx0002.
+DATA: yreport_no TYPE yreport_no,
+      gw_zstr_rtd_upd TYPE zstr_rtd_upd.
+
+DATA: lr_report_no TYPE RANGE OF yreport_no.
+DATA: lw_report_no LIKE LINE OF lr_report_no.
+
+TYPES : BEGIN OF lty_yttstx0001,
+  area TYPE	yarea,
+  report_no TYPE  yreport_no,
+  function TYPE	ystats,
+  END OF lty_yttstx0001.
+
+DATA: lt_yttstx0001 TYPE TABLE OF lty_yttstx0001,
+      lw_yttstx0001 TYPE lty_yttstx0001,
+      lw_yttstx0001_c TYPE lty_yttstx0001.
+
+CONSTANTS:
+            gc_x            TYPE char1 VALUE 'X',
+            gc_mgx TYPE ystats VALUE 'MGX'.
+
+**********************BOC by Hiral on 22.07.2022********************
+TYPES: BEGIN OF lty_zlog_exec_var,
+  name TYPE	rvari_vnam,
+  active TYPE	zactive_flag,
+  END OF lty_zlog_exec_var.
+
+DATA: lt_zlog_exec_var TYPE TABLE OF lty_zlog_exec_var,
+      lw_zlog_exec_var TYPE lty_zlog_exec_var.
+
+CONSTANTS: lc_name TYPE rvari_vnam VALUE 'ZLOG_HIST_SYN_INPUT_VALID'.
+**********************EOC by Hiral on 22.07.2022********************
+
+INITIALIZATION.
+  AUTHORITY-CHECK OBJECT 'S_TCODE'
+           ID 'TCD' FIELD 'ZLOG_HIST_SYN'.
+  IF sy-subrc <> 0.
+    MESSAGE 'No Authrization'(002) TYPE 'E'.
+  ENDIF.
+
+ DATA : RB TYPE C.           " added by sagar on 02/09/2022
+ RB = '1'.
+* EXPORT RB TO MEMORY ID RB.""sagar
+
+  CLEAR: lw_zlog_exec_var.
+  SELECT SINGLE name
+                active
+    FROM zlog_exec_var
+    INTO lw_zlog_exec_var
+    WHERE name = lc_name
+    AND active = abap_true.
+
+  SELECTION-SCREEN BEGIN OF BLOCK b1 WITH FRAME TITLE text-003.
+  PARAMETERS:     p_area      TYPE yarea MODIF ID m1.
+  SELECT-OPTIONS: s_report    FOR yreport_no MODIF ID m3.
+  PARAMETERS: p_rep_c   TYPE yreport_no MODIF ID m2 ."Added by Hiral
+  SELECT-OPTIONS: s_item      FOR gw1_yttstx0002-item_no MODIF ID m1.
+  PARAMETERS:     p_tknum     TYPE tknum MODIF ID m2.
+
+  PARAMETERS:
+                  p_corr RADIOBUTTON GROUP gr1 DEFAULT 'X' USER-COMMAND u1,
+                  p_retr RADIOBUTTON GROUP gr1 ,
+                  p_hist RADIOBUTTON GROUP gr1 .
+*                  p_hdr  RADIOBUTTON GROUP gr1,
+*                  p_itm  RADIOBUTTON GROUP gr1,
+*                  p_ccpp RADIOBUTTON GROUP gr1.
+  ") pwc_071 12.10.2015
+  SELECTION-SCREEN END OF BLOCK b1.
+
+AT SELECTION-SCREEN ON  p_area.
+  IF lw_zlog_exec_var IS NOT INITIAL.
+    IF p_area IS INITIAL.
+      MESSAGE 'Enter Area' TYPE 'E'.
+    ENDIF.
+  ENDIF.
+
+AT SELECTION-SCREEN ON p_rep_c.
+  IF p_corr = abap_true.
+    IF lw_zlog_exec_var IS NOT INITIAL.
+      IF p_rep_c IS INITIAL.
+        MESSAGE 'Enter Reporting No' TYPE 'E'.
+      ENDIF.
+    ENDIF.
+  ENDIF.
+
+AT SELECTION-SCREEN ON s_report.
+  IF p_corr NE abap_true.
+    IF lw_zlog_exec_var IS NOT INITIAL.
+      IF s_report IS INITIAL.
+        MESSAGE 'Enter Reporting No' TYPE 'E'.
+      ENDIF.
+    ENDIF.
+  ENDIF.
+
+
+AT SELECTION-SCREEN ON  s_item.
+  IF lw_zlog_exec_var IS NOT INITIAL.
+    IF s_item IS INITIAL.
+      MESSAGE 'Enter Item No' TYPE 'E'.
+    ENDIF.
+  ENDIF.
+
+
+AT SELECTION-SCREEN OUTPUT.
+  " SOC by sagar on 02/09/2022
+ " IMPORT RB FROM MEMORY ID RB.
+  IF p_corr = 'X'.
+  IF NOT RB = '1'.
+  RB = '1'.
+ " EXPORT RB TO MEMORY ID RB.
+  CLEAR : p_area ,s_item[], p_rep_c .
+  ENDIF.
+  ENDIF.
+
+  IF p_retr = 'X'.
+  IF NOT RB = '2'.
+  RB = '2'.
+  "EXPORT RB TO MEMORY ID RB.
+  CLEAR : p_area, s_item[], s_report[] .
+  ENDIF.
+  ENDIF.
+
+  IF p_hist = 'X'.
+  IF NOT RB = '3'.
+  RB = '3'.
+  "EXPORT RB TO MEMORY ID RB.
+  CLEAR : p_area, s_item[], s_report[] .
+  ENDIF.
+  ENDIF.
+" EOC by sagar on 02/09/2022
+  PERFORM dynamic_screen.
+
+START-OF-SELECTION.
+
+  IF p_corr IS INITIAL.
+
+    REFRESH: lt_yttstx0001.
+    SELECT area
+           report_no
+           function
+      FROM yttstx0001
+      INTO TABLE lt_yttstx0001
+      WHERE area = p_area
+      AND report_no IN s_report.
+
+    IF sy-subrc = 0.
+      DELETE lt_yttstx0001 WHERE function = gc_mgx.
+    ENDIF.
+
+    CLEAR: lw_yttstx0001.
+    LOOP AT lt_yttstx0001 INTO lw_yttstx0001.
+      lw_report_no-sign = 'I'.
+      lw_report_no-option = 'EQ'.
+      lw_report_no-low = lw_yttstx0001-report_no.
+      APPEND lw_report_no TO lr_report_no.
+      CLEAR: lw_yttstx0001.
+    ENDLOOP.
+
+  ENDIF.
+
+
+  " ( pwc_071 12.10.2015
+  IF p_corr IS NOT INITIAL .
+
+    IF p_tknum IS NOT INITIAL.
+
+      CLEAR: lw_yttstx0001_c.
+      SELECT SINGLE area
+             report_no
+             function
+        FROM yttstx0001
+        INTO  lw_yttstx0001_c
+        WHERE area = p_area
+        AND report_no = p_rep_c
+        AND function = gc_mgx.
+
+      IF  lw_yttstx0001_c IS  INITIAL.
+        gw_zstr_rtd_upd-report_no = p_rep_c."s_report-low.
+        gw_zstr_rtd_upd-tknum = p_tknum.
+        gw_zstr_rtd_upd-area = p_area.
+      ENDIF.
+
+
+*      gw_zstr_rtd_upd-report_no = s_report-low.
+
+      CALL METHOD zcl_log_exec=>update_ytts_shp
+        EXPORTING
+          zstr_rtd_upd = gw_zstr_rtd_upd.
+      .
+
+    ENDIF.
+
+    " ( pwc_071 12.10.2015
+  ELSEIF p_hist IS NOT INITIAL.
+    IF lr_report_no IS NOT INITIAL . "Hiral 12.07.2022
+
+      REFRESH: gt_yttstx0002.
+
+      SELECT *
+        FROM yttstx0002
+        INTO TABLE gt_yttstx0002
+        WHERE area      = p_area
+          AND    report_no IN lr_report_no"s_report "Hiral
+          AND    item_no IN s_item.
+      IF sy-subrc = 0.
+        SORT gt_yttstx0002 BY area report_no item_no.
+
+        LOOP AT gt_yttstx0002 INTO gw_yttstx0002.
+
+          CALL FUNCTION 'Z_UPDATE_YTTS2'
+            EXPORTING
+              yttstx0002   = gw_yttstx0002
+            EXCEPTIONS
+              update_error = 1
+              delete_error = 2
+              OTHERS       = 3.
+          CLEAR: gw_yttstx0002.
+
+        ENDLOOP.
+
+      ENDIF."Hiral 12.07.2022
+    ENDIF.
+
+    " ) pwc_071 12.10.2015
+
+
+
+  ELSE.
+    " ) pwc_071 12.10.2015
+
+    IF lr_report_no IS NOT INITIAL .
+
+      SELECT * FROM yttstx0002_hist INTO TABLE gt_yttstx0002_hist
+                  WHERE area       = p_area  AND
+                        report_no  IN lr_report_no AND  "Hiral
+                         item_no IN s_item. "pwc_071 24.10.2015
+
+
+      IF  sy-subrc = 0 AND gt_yttstx0002_hist IS NOT INITIAL.
+        SORT gt_yttstx0002_hist BY area report_no item_no.
+        DELETE ADJACENT DUPLICATES FROM gt_yttstx0002_hist COMPARING area report_no item_no.
+
+        SELECT * FROM yttstx0002 INTO TABLE gt_yttstx0002
+             FOR ALL ENTRIES IN gt_yttstx0002_hist
+          WHERE area      = gt_yttstx0002_hist-area AND
+                report_no = gt_yttstx0002_hist-report_no AND
+                item_no = gt_yttstx0002_hist-item_no.
+        IF sy-subrc = 0.
+          SORT gt_yttstx0002 BY area report_no item_no.
+        ENDIF.
+      ENDIF.
+
+
+
+      LOOP AT gt_yttstx0002_hist INTO gw_yttstx0002_hist.
+*      IF sy-subrc = 0.
+        READ TABLE gt_yttstx0002 INTO gw_yttstx0002 WITH KEY area = gw_yttstx0002_hist-area
+                                                             report_no = gw_yttstx0002_hist-report_no
+                                                             item_no = gw_yttstx0002_hist-item_no BINARY SEARCH.
+        IF sy-subrc <> 0.
+
+          MOVE-CORRESPONDING : gw_yttstx0002_hist TO gw1_yttstx0002.
+
+*      ENDIF.
+*      IF sy-subrc = 0.
+          APPEND gw1_yttstx0002 TO gt1_yttstx0002.
+          CLEAR: gw1_yttstx0002,gw_yttstx0002_hist,gw_yttstx0002.
+*      ENDIF.
+        ENDIF.
+
+      ENDLOOP.
+
+      CALL FUNCTION 'ENQUEUE_EZ_YTTSTX0002'
+        EXPORTING
+          mode_yttstx0002 = 'E'
+          mandt           = sy-mandt
+          area            = gt1_yttstx0002-area
+          report_no       = gt1_yttstx0002-report_no
+          item_no         = gt1_yttstx0002-item_no
+*         X_AREA          = ' '
+*         X_REPORT_NO     = ' '
+*         X_ITEM_NO       = ' '
+*         _SCOPE          = '2'
+*         _WAIT           = ' '
+*         _COLLECT        = ' '
+        EXCEPTIONS
+          foreign_lock    = 1
+          system_failure  = 2
+          OTHERS          = 3.
+      IF sy-subrc <> 0.
+* Implement suitable error handling here
+      ENDIF.
+
+      IF gt1_yttstx0002[] IS NOT INITIAL.
+        MODIFY  yttstx0002  FROM TABLE gt1_yttstx0002[].
+      ENDIF.
+
+      IF sy-subrc = 0.
+        COMMIT WORK AND WAIT.
+      ENDIF.
+
+      MESSAGE 'Updated Successfully '(001) TYPE 'S'.
+
+      CALL FUNCTION 'DEQUEUE_EZ_YTTSTX0002'
+        EXPORTING
+          mode_yttstx0002 = 'E'
+          mandt           = sy-mandt
+          area            = gt1_yttstx0002-area
+          report_no       = gt1_yttstx0002-report_no
+          item_no         = gt1_yttstx0002-item_no
+*         X_AREA          = ' '
+*         X_REPORT_NO     = ' '
+*         X_ITEM_NO       = ' '
+*         _SCOPE          = '3'
+*         _SYNCHRON       = ' '
+*         _COLLECT        = ' '
+        .
+
+    ENDIF. "  12.07.2022 "Hiral
+  ENDIF. "  pwc_071 12.10.2015
+*&---------------------------------------------------------------------*
+*&      Form  DYNAMIC_SCREEN
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM dynamic_screen .
+
+
+
+  IF p_retr EQ gc_x OR p_hist EQ gc_x.
+
+    LOOP AT SCREEN.
+      IF screen-group1 = 'M2'.
+        screen-invisible = 1.
+        screen-active    = 0.
+        MODIFY SCREEN.
+      ENDIF.
+    ENDLOOP.
+  ELSEIF p_corr EQ gc_x.
+    LOOP AT SCREEN.
+      IF screen-group1 = 'M3'.
+        screen-invisible = 1.
+        screen-active    = 0.
+        MODIFY SCREEN.
+      ENDIF.
+    ENDLOOP.
+  ELSE.
+    LOOP AT SCREEN.
+      IF screen-group1 = 'M2'.
+        screen-invisible = 0.
+        screen-active    = 1.
+        MODIFY SCREEN.
+      ENDIF.
+    ENDLOOP.
+  ENDIF.
+
+
+ENDFORM.                    " DYNAMIC_SCREEN
